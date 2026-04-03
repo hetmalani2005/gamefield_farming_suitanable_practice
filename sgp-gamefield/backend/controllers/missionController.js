@@ -161,11 +161,22 @@ const completeMission = async (req, res) => {
     await user.save();
 
     if (req.io) {
-      req.io.to(req.user.id).emit('xpUpdated', {
+      // Original XP update event
+      req.io.to(req.session?.userId || req.user.id).emit('xpUpdated', {
         xp: user.xp,
         level: user.level,
         sustainabilityScore: user.sustainabilityScore,
         badges: user.badges
+      });
+
+      // New Dynamic Leaderboard Update Event
+      req.io.emit('leaderboardUpdate', {
+        userId: user._id,
+        name: user.name,
+        village: user.farmData?.location?.village,
+        cropType: user.farmData?.cropType || user.selectedCrop,
+        newXP: user.xp,
+        rank: 0 // Frontend will recalculate or refetch
       });
     }
 

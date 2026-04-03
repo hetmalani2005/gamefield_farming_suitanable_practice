@@ -303,22 +303,18 @@ const Missions = ({ user }) => {
 
   const handleComplete = async (missionId, file) => {
     try {
-      let proofUrl = 'proof_uploaded';
-      if (file) {
-        const formData = new FormData();
-        formData.append('proof', file);
-        formData.append('missionId', missionId);
-        try {
-          const uploadRes = await api.post('/missions/complete', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          proofUrl = uploadRes.data?.proofUrl || 'uploaded';
-        } catch {
-          await api.post('/missions/complete', { missionId, proofUrl: 'proof_submitted' });
-        }
-      } else {
-        await api.post('/missions/complete', { missionId, proofUrl: 'proof_submitted' });
+      if (!file) {
+        showToast('Please upload a valid proof to complete the mission', 'error');
+        return;
       }
+      const formData = new FormData();
+      formData.append('proof', file);
+      formData.append('missionId', missionId);
+      
+      await api.post('/missions/complete', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
       const res = await api.get('/auth/profile');
       setUserProfile(res.data);
       showToast('Mission completed! XP & Badge awarded 🎉');

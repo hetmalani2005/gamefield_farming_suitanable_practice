@@ -3,10 +3,10 @@ const router = express.Router();
 const User = require('../models/User');
 
 // GET /api/leaderboard
-// Query params: filter, value, crop, groupBy (village|district|state)
+// Query params: village, crop, groupBy (village|district|state)
 router.get('/', async (req, res) => {
   try {
-    const { filter, value, crop, groupBy } = req.query;
+    const { village, crop, groupBy } = req.query;
     
     // If groupBy is provided, we return an aggregated leaderboard
     if (groupBy && ['village', 'district', 'state'].includes(groupBy.toLowerCase())) {
@@ -41,20 +41,22 @@ router.get('/', async (req, res) => {
 
     let query = {};
     
-    if (filter === 'village' && value) {
-      query['farmData.location.village'] = new RegExp(value, 'i');
-    } else if (filter === 'district' && value) {
-      query['farmData.location.district'] = new RegExp(value, 'i');
-    } else if (filter === 'state' && value) {
-      query['farmData.location.state'] = new RegExp(value, 'i');
+    if (village) {
+      query['farmData.location.village'] = new RegExp(`^${village}$`, 'i');
     }
     
     if (crop) {
-      query['farmData.cropType'] = new RegExp(crop, 'i');
+      // Improved crop matching with trim and case-insensitivity
+      const cropRegex = new RegExp(`^${crop.trim()}$`, 'i');
+      query.$or = [
+        { 'farmData.cropType': cropRegex },
+        { 'selectedCrop': cropRegex }
+      ];
     }
 
+
     const users = await User.find(query)
-      .select('name firstName lastName xp level badges farmData sustainabilityScore completedMissions createdAt')
+      .select('name firstName lastName xp level badges farmData sustainabilityScore completedMissions currentBadge createdAt')
       .sort({ xp: -1 })
       .limit(50);
 
@@ -70,8 +72,8 @@ router.get('/', async (req, res) => {
       missionsCompleted: u.completedMissions?.length || 0,
       currentBadge: u.currentBadge?.title ? u.currentBadge : (require('../utils/badgeHelper').getBadgeByXP(u.xp)),
       farmData: {
-        cropType: u.farmData?.cropType,
-        soilType: u.farmData?.soilType,
+        cropType: u.farmData?.cropType || u.selectedCrop,
+        soilType: u.farmData?.soilType || u.soilType,
         location: u.farmData?.location
       },
       rank: i + 1,
@@ -80,6 +82,7 @@ router.get('/', async (req, res) => {
 
     res.json(leaderboard);
   } catch (err) {
+    console.error('Leaderboard error:', err);
     res.status(500).json({ message: err.message });
   }
 });

@@ -13,13 +13,7 @@ import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
 import ChevronLeft from 'lucide-react/dist/esm/icons/chevron-left';
 import Leaf from 'lucide-react/dist/esm/icons/leaf';
 
-const INDIAN_STATES = [
-  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
-  'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
-  'Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab',
-  'Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh',
-  'Uttarakhand','West Bengal','Delhi','Jammu & Kashmir','Ladakh'
-];
+
 
 const InputField = ({ icon: Icon, label, showPassword, onTogglePassword, ...props }) => (
   <div className="group">
@@ -253,21 +247,8 @@ const Auth = ({ setUser }) => {
                 <>
                   <InputField icon={MapPin} label="Village / Town" type="text" placeholder="e.g. Kopargaon" value={formData.village} onChange={set('village')} id="reg-village" />
                   <InputField icon={MapPin} label="District" type="text" placeholder="e.g. Ahmednagar" value={formData.district} onChange={set('district')} id="reg-district" />
-                  <div className="group">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-green-900 mb-2 block opacity-60">State</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                      <select
-                        value={formData.state}
-                        onChange={set('state')}
-                        className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-green-500 focus:bg-white transition-all outline-none font-semibold text-sm shadow-sm appearance-none"
-                        id="reg-state"
-                      >
-                        <option value="">Select your state</option>
-                        {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  <InputField icon={MapPin} label="State" type="text" placeholder="e.g. Maharashtra" value={formData.state} onChange={set('state')} id="reg-state" />
+
                 </>
               )}
 

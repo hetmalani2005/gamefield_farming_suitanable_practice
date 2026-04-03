@@ -13,6 +13,8 @@ import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
 import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2';
 import Star from 'lucide-react/dist/esm/icons/star';
 import Zap from 'lucide-react/dist/esm/icons/zap';
+import Medal from 'lucide-react/dist/esm/icons/medal';
+import Trophy from 'lucide-react/dist/esm/icons/trophy';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useState, useEffect, useRef } from 'react';
@@ -43,10 +45,9 @@ const MissionCard = ({ mission, onStart, onUploadProof }) => {
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`${colors.bg} ${colors.text} text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider`}>{mission.category}</span>
-            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
-              mission.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
-              mission.difficulty === 'Hard' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-            }`}>{mission.difficulty || 'Medium'}</span>
+            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${mission.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                mission.difficulty === 'Hard' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+              }`}>{mission.difficulty || 'Medium'}</span>
           </div>
           <span className="text-green-600 font-black text-sm bg-green-50 px-3 py-1 rounded-full flex items-center gap-1">
             <Zap size={12} />{mission.xpReward} XP
@@ -147,7 +148,7 @@ const Dashboard = ({ user: initialUser, setUser }) => {
   const [activeMissions, setActiveMissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastXPGain, setLastXPGain] = useState(null);
-  const [newBadge, setNewBadge] = useState(null);
+  const [newBadge, setNewBadge] = useState(null); // Mission badge state
   const [proofModal, setProofModal] = useState(null); // missionId
   const [proofFile, setProofFile] = useState(null);
   const prevXPRef = useRef(initialUser?.xp || 0);
@@ -160,6 +161,9 @@ const Dashboard = ({ user: initialUser, setUser }) => {
     windSpeed: '--',
     condition: 'Sunny'
   });
+  const [villageLeaderboard, setVillageLeaderboard] = useState([]);
+  const [villageRank, setVillageRank] = useState(null);
+
 
   const fetchUserProfile = async () => {
     try {
@@ -178,8 +182,39 @@ const Dashboard = ({ user: initialUser, setUser }) => {
   }, [initialUser]);
 
   useEffect(() => {
+    const fetchVillageLeaderboard = async (profileData) => {
+      try {
+        const village = profileData?.farmData?.location?.village?.trim();
+        const crop = (profileData?.farmData?.cropType || profileData?.selectedCrop || '').trim();
+        const userId = profileData?._id || profileData?.id;
+
+        if (village && userId) {
+          const res = await api.get(`/leaderboard?village=${encodeURIComponent(village)}&crop=${encodeURIComponent(crop)}`);
+          
+          if (res.data && Array.isArray(res.data)) {
+            setVillageLeaderboard(res.data.slice(0, 3));
+            // Robust ID matching
+            const foundUser = res.data.find(f => 
+              f._id?.toString() === userId.toString() || 
+              (f.id && f.id.toString() === userId.toString())
+            );
+            
+            if (foundUser) {
+              setVillageRank(foundUser.rank);
+            } else {
+              setVillageRank('10+'); // Default if not in top 50 but in village
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching village leaderboard:', err);
+      }
+    };
+
+
     const init = async () => {
       const profile = await fetchUserProfile();
+      fetchVillageLeaderboard(profile);
       try {
         const res = await api.get('/missions');
         setActiveMissions(res.data.slice(0, 3));
@@ -190,6 +225,7 @@ const Dashboard = ({ user: initialUser, setUser }) => {
       }
     };
     init();
+
 
     // Weather
     if (navigator.geolocation) {
@@ -259,9 +295,19 @@ const Dashboard = ({ user: initialUser, setUser }) => {
     }
   };
 
-  const handleCompleteMission = async (missionId, proofUrl = 'uploaded') => {
+  const handleCompleteMission = async (missionId, file) => {
     try {
-      await api.post('/missions/complete', { missionId, proofUrl });
+      if (!file) {
+        alert("Please attach a proof");
+        return;
+      }
+      const formData = new FormData();
+      formData.append('proof', file);
+      formData.append('missionId', missionId);
+      
+      await api.post('/missions/complete', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       alert('Mission Completed! XP and Badge awarded! 🎉');
       fetchUserProfile();
       const res = await api.get('/missions');
@@ -273,10 +319,12 @@ const Dashboard = ({ user: initialUser, setUser }) => {
 
   const stats = [
     { label: 'Total XP', value: (user?.xp || 0).toLocaleString(), icon: TrendingUp, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
-    { label: 'Eco Score', value: user?.sustainabilityScore || 0, icon: Leaf, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+    { label: 'Village Rank', value: villageRank !== null ? `#${villageRank}` : '--', icon: Medal, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
     { label: 'Badges', value: user?.badges?.length || 0, icon: Award, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
     { label: 'Level', value: user?.level || 1, icon: Star, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
   ];
+
+
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-16 relative">
@@ -440,8 +488,51 @@ const Dashboard = ({ user: initialUser, setUser }) => {
           {/* Badges System */}
           <BadgeSystem user={user} onDownloadCertificate={handleDownloadCertificate} />
 
+          {/* Village Leaderboard Widget */}
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:rotate-12 transition-transform">
+              <Trophy size={80} className="text-amber-500" />
+            </div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center">
+                <Trophy size={20} />
+              </div>
+              <div>
+                <h3 className="font-black text-gray-800 text-sm">Village Top Growers</h3>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{user?.farmData?.location?.village || 'Local'}</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              {villageLeaderboard.map((f, i) => (
+                <div key={f._id} className={`flex items-center justify-between p-3 rounded-2xl border ${f._id === (user?._id || user?.id) ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-black w-5 ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : 'text-orange-400'}`}>
+                      {i + 1}
+                    </span>
+                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-black text-gray-500 shadow-sm uppercase">
+                      {f.name.substring(0, 2)}
+                    </div>
+                    <span className="text-xs font-bold text-gray-700 truncate max-w-[80px]">{f.name}</span>
+                  </div>
+                  <span className="text-[11px] font-black text-gray-800">{f.xp.toLocaleString()} XP</span>
+                </div>
+              ))}
+              {villageLeaderboard.length === 0 && (
+                <div className="text-center py-4">
+                  <p className="text-xs font-bold text-gray-400 italic">No rankings yet...</p>
+                </div>
+              )}
+            </div>
+            
+            <Link to="/leaderboard" className="mt-5 w-full py-3 text-xs font-black text-amber-600 border border-amber-200 rounded-xl flex items-center justify-center gap-2 hover:bg-amber-50 transition-colors">
+              Full Leaderboard <ChevronRight size={14} />
+            </Link>
+          </div>
+
           {/* Govt Schemes Quick */}
           <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6">
+
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
                 <ShieldCheck size={20} />
@@ -508,12 +599,15 @@ const Dashboard = ({ user: initialUser, setUser }) => {
               </label>
               <div className="flex gap-3 mt-5">
                 <button
+                  disabled={!proofFile}
                   onClick={() => {
-                    handleCompleteMission(proofModal, proofFile ? 'uploaded_proof' : 'dummy');
-                    setProofModal(null);
-                    setProofFile(null);
+                    if(proofFile) {
+                      handleCompleteMission(proofModal, proofFile);
+                      setProofModal(null);
+                      setProofFile(null);
+                    }
                   }}
-                  className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-sm uppercase tracking-wide hover:bg-green-700 transition-colors"
+                  className={`flex-1 py-3 ${proofFile ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'} text-white rounded-xl font-black text-sm uppercase tracking-wide transition-colors`}
                 >
                   Submit & Complete
                 </button>

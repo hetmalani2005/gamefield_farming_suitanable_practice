@@ -9,7 +9,6 @@ import Bell from 'lucide-react/dist/esm/icons/bell';
 import Search from 'lucide-react/dist/esm/icons/search';
 import Leaf from 'lucide-react/dist/esm/icons/leaf';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
-
 const Navbar = ({ user }) => {
   const location = useLocation();
 

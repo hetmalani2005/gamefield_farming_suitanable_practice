@@ -113,8 +113,8 @@ const RewardCard = ({ rank, farmer }) => {
 };
 
 const Leaderboard = ({ user }) => {
-  const [viewType, setViewType] = useState('Farmers'); // 'Farmers' or 'Regions'
-  const [filter, setFilter] = useState('Global');
+  const [filter, setFilter] = useState('Village');
+
   const [farmers, setFarmers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -122,22 +122,20 @@ const Leaderboard = ({ user }) => {
 
   const fetchLeaderboard = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoading(true); 
       const params = new URLSearchParams();
       
-      if (viewType === 'Regions') {
-        const groupBy = filter === 'Global' ? 'village' : filter.toLowerCase();
-        params.append('groupBy', groupBy);
-      } else {
-        if (filter !== 'Global') {
-          params.append('filter', filter.toLowerCase());
-          const userFarm = user?.farmData?.location;
-          if (filter === 'Village' && userFarm?.village) params.append('value', userFarm.village);
-          else if (filter === 'District' && userFarm?.district) params.append('value', userFarm.district);
-          else if (filter === 'State' && userFarm?.state) params.append('value', userFarm.state);
-        }
+      // Always use Village filter
+      if (user?.farmData?.location?.village) {
+        params.append('village', user.farmData.location.village);
       }
-      if (cropFilter) params.append('crop', cropFilter);
+      
+      // Always respect crop filter if set, otherwise default to user's crop
+      if (cropFilter) {
+        params.append('crop', cropFilter);
+      } else if (user?.farmData?.cropType || user?.selectedCrop) {
+        params.append('crop', user.farmData?.cropType || user.selectedCrop);
+      }
 
       const res = await api.get(`/leaderboard?${params}`);
       setFarmers(res.data);
@@ -146,14 +144,34 @@ const Leaderboard = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  }, [viewType, filter, cropFilter, user?.farmData?.location]);
+  }, [cropFilter, user]);
+
+
 
   useEffect(() => {
     fetchLeaderboard();
     const socket = io('http://localhost:5001');
-    socket.on('leaderboardUpdate', () => fetchLeaderboard());
+    
+    socket.on('leaderboardUpdate', (data) => {
+      // Check if update is relevant to current village and crop
+      let isRelevant = false;
+      
+      if (data.village === user?.farmData?.location?.village) {
+        if (!cropFilter || data.cropType === cropFilter) isRelevant = true;
+        else if (!cropFilter && data.cropType === (user?.farmData?.cropType || user?.selectedCrop)) isRelevant = true;
+      }
+      
+      if (isRelevant) {
+        console.log('⚡ Real-time Leaderboard Update:', data.name);
+        fetchLeaderboard();
+      }
+    });
+
+
     return () => socket.disconnect();
-  }, [fetchLeaderboard]);
+  }, [fetchLeaderboard, cropFilter, user]);
+
+
 
   const filteredFarmers = farmers.filter(f =>
     !search || 
@@ -165,8 +183,8 @@ const Leaderboard = ({ user }) => {
   );
 
   const top3 = filteredFarmers.slice(0, 3);
-  const FILTER_OPTIONS = ['Global', 'State', 'District', 'Village'];
   const CROPS = ['', 'Wheat', 'Rice', 'Cotton', 'Sugarcane', 'Tomato', 'Soybean', 'Maize'];
+
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 pb-20 mt-6 font-outfit">
@@ -178,19 +196,22 @@ const Leaderboard = ({ user }) => {
         </motion.div>
         <div className="relative z-10 text-center">
           <div className="inline-flex items-center gap-2 bg-amber-400/20 border border-amber-300/30 px-5 py-2 rounded-full text-amber-300 font-black text-sm mb-6">
-            <Trophy size={16} /> Farmers' Hall of Fame
+            <Trophy size={16} /> Hall of Fame
           </div>
           <h1 className="text-4xl lg:text-5xl font-black leading-tight mb-3">
-            Champion <span className="text-emerald-400">Green Warriors</span>
+             Top Farmers in {user?.farmData?.location?.village || 'Your Village'} 🌾
           </h1>
           <p className="text-white/60 font-medium text-lg max-w-xl mx-auto">
-            Top performing farmers leading India's sustainable farming revolution
+             Competing with {cropFilter || user?.farmData?.cropType || user?.selectedCrop || 'any'} growers near you
           </p>
+
         </div>
+
       </section>
 
-      {/* Top 3 Rewards Cards - Only for Farmers */}
-      {viewType === 'Farmers' && top3.length > 0 && (
+      {/* Top 3 Rewards Cards */}
+      {top3.length > 0 && (
+
         <div>
           <h2 className="text-2xl font-black text-gray-900 mb-5 flex items-center gap-2">
             <Trophy size={24} className="text-amber-500" /> Prize Winners
@@ -203,8 +224,9 @@ const Leaderboard = ({ user }) => {
         </div>
       )}
 
-      {/* Podium Visual - Only for Farmers */}
-      {viewType === 'Farmers' && top3.length > 0 && (
+      {/* Podium Visual */}
+      {top3.length > 0 && (
+
         <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-10 overflow-hidden relative">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-emerald-400 to-blue-400" />
           <h2 className="text-center text-xl font-black text-gray-800 mb-10 uppercase tracking-widest">Top Performers Podium</h2>
@@ -265,37 +287,13 @@ const Leaderboard = ({ user }) => {
       <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
         {/* Toggle & Filter Bar */}
         <div className="p-6 border-b border-gray-50 flex flex-col space-y-6 bg-gray-50/30">
-          <div className="flex bg-white p-1 rounded-2xl border border-gray-100 self-center md:self-start w-fit">
-            <button
-              onClick={() => { setViewType('Farmers'); setFilter('Global'); }}
-              className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${viewType === 'Farmers' ? 'bg-[#1b4332] text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              👩‍🌾 Farmer Rankings
-            </button>
-            <button
-              onClick={() => { setViewType('Regions'); setFilter('State'); }}
-              className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${viewType === 'Regions' ? 'bg-[#1b4332] text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              🏘 Region Rankings
-            </button>
-          </div>
-
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <div className="flex flex-wrap gap-2">
-              {FILTER_OPTIONS.map(f => {
-                if (viewType === 'Regions' && f === 'Global') return null;
-                return (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${filter === f ? 'bg-green-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-100 hover:text-green-600 hover:border-green-200'}`}
-                  >
-                    {f === 'Global' ? '🌍' : f === 'State' ? '🏛' : f === 'District' ? '📍' : '🏘'} 
-                    {viewType === 'Regions' ? ` Top ${f}s` : f === 'Global' ? ' Global' : ` My ${f}`}
-                  </button>
-                );
-              })}
+               <button className="px-5 py-2.5 rounded-xl font-bold text-sm bg-green-600 text-white shadow-md flex items-center gap-2">
+                 🏘 My Village
+               </button>
             </div>
+
 
             <div className="flex items-center gap-3 flex-wrap">
               <select
@@ -435,8 +433,7 @@ const Leaderboard = ({ user }) => {
         {filteredFarmers.length > 0 && (
           <div className="p-8 text-center bg-gray-50/30 border-t border-gray-50">
             <p className="text-gray-400 font-bold text-sm">
-              Showing <span className="font-black text-gray-700">{filteredFarmers.length}</span> {viewType === 'Farmers' ? 'farmers' : 'regions'}
-              {filter !== 'Global' && viewType === 'Farmers' && ` in your ${filter.toLowerCase()}`}
+              Showing <span className="font-black text-gray-700">{filteredFarmers.length}</span> farmers in your village
             </p>
           </div>
         )}
